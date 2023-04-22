@@ -4,6 +4,8 @@ import databases
 import sqlalchemy
 import uvicorn
 import uuid
+from pydantic import parse_obj_as
+from pydantic.types import Json
 
 from datetime import datetime 
 from typing import List
@@ -15,7 +17,9 @@ from pydantic import BaseModel, Field
 import sqlite3
 
 from table import create_table_sql as Trades
+
 from schemas.schema import Trade,TradeDetails
+import json
 
 app = FastAPI()
 
@@ -37,7 +41,7 @@ conn.close()
 
 # Endpoint to create trade in the local memory for testing
 @app.post("/trades")
-def create_trade(trade: Trade):
+async def create_trade(trade: Trade):
     # Connect to the database
     conn = sqlite3.connect('trades.db')
 
@@ -47,9 +51,12 @@ def create_trade(trade: Trade):
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     '''
 
+    
+
     conn.execute(insert_sql, (trade.asset_class, trade.counterparty, trade.instrument_id, trade.instrument_name,
                               trade.trade_date_time, trade.trade_details.json(), trade.trade_id, trade.trader))
-
+    
+    
     # Commit the changes to the database
     conn.commit()
 
@@ -60,9 +67,13 @@ def create_trade(trade: Trade):
     return trade
 
 
+
+
+
+
 # EndPoint to fetch single trade with the trade_id
 @app.get("/trades/{trade_id}")
-def get_trade(trade_id: str):
+async def get_trade(trade_id: str):
     # Connect to the database
     conn = sqlite3.connect('trades.db')
 
@@ -92,13 +103,14 @@ def get_trade(trade_id: str):
         trade_id=row[7],
         trader=row[8]
     )
-
+    
+    
     return trade
 
 
 ## EndPoint to seache the trade details using the counterparty,instrument_id,trader,instrument_ name
 @app.get("/trades/search/details")
-def search_trades(
+async def search_trades(
     counterparty: str = None,
     instrument_id: str = None,
     trader: str = None,
@@ -164,11 +176,12 @@ def search_trades(
 
 
 # End point for searching all the trades with particular assser class
-@app.get("/trades/search/assetclass")
-def search_acc_assetclass(
+@app.get("/trades/search/assetclass/filter{asset_class}")
+async def search_acc_assetclass(
     asset_class: str = None,
    
 ):
+
     # Connect to the database
     conn = sqlite3.connect('trades.db')
 
@@ -220,30 +233,97 @@ def search_acc_assetclass(
 
 
 # EndPoint to fetch single trade with the trade_id
-@app.get("/trades/date_time")
+@app.get("/trades/date_time/filter/{start}/{end}")
 async def get_trades_acc_date_time(start: datetime,end:datetime):
+    #print(start,end)
+    
+    start = start.strftime('%Y-%m-%d %H:%M:%S')
+    end = end.strftime('%Y-%m-%d %H:%M:%S')
+    # Connect to the database
     conn = sqlite3.connect('trades.db')
-    c = conn.cursor()
-    query = f"SELECT * FROM trades WHERE trade_date_time BETWEEN {start} and {end}"
-    c.execute(query)
+
+    # Retrieve Trade details from the Trades table
+    select_sql = '''
+    SELECT * FROM Trades WHERE trade_date_time BETWEEN ? AND ?
+    '''
+
+    cursor = conn.execute(select_sql,(start,end))
+    rows = cursor.fetchall()
+
+    print(type(rows))
+
+    # Close the connection
+    conn.close()
+
     trades = []
-    for row in c.fetchall():
+    for row in rows:
         trade = Trade(
-            asset_class=row[0],
-            counterparty=row[1],
-            instrument_id=row[2],
-            instrument_name=row[3],
-            trade_date_time=datetime.fromisoformat(row[4]),
-            trade_details=TradeDetails(
-                buy_sell_indicator=row[5],
-                price=row[6],
-                quantity=row[7]
-            ),
-            trade_id=row[8],
-            trader=row[9]
+            asset_class=row[1],
+            counterparty=row[2],
+            instrument_id=row[3],
+            instrument_name=row[4],
+            trade_date_time=row[5],
+            trade_details=TradeDetails.parse_raw(row[6]),
+            trade_id=row[7],
+            trader=row[8]
         )
         trades.append(trade)
-    conn.close()
+
     return trades
+
+
+ #Endpoint to filter data according the min and max price
+@app.get("/trades/{mini_price}/{maxi_price}")
+async def search_trade_acc_price(mini:float,maxi:float):
+    # Connect to the database
+    conn = sqlite3.connect('trades.db')
+    c = conn.cursor()
+    query = f"SELECT * FROM trades"
+   
+    c.execute(query)
+    data = c.fetchall()
+    price_data = []
+    for item in data:
+        try:
+           dict_data = json.loads(item[6])
+           if mini <= int(dict_data["price"]) <= maxi:
+               price_data.append(item)
+        except:
+            pass
+
+  
+    c.close()
+
+    return price_data
+    
+
+# Endpoint to filter the trade according to the tradetype
+@app.get('/trade/filter/{buy_sell_indicator}')
+async def filter_trade_acc_trade_type(buy_sell_indicator:str):
+
+    # Connect to the database
+    conn = sqlite3.connect('trades.db')
+    c = conn.cursor()
+    query = f"SELECT * FROM trades"
+   
+    c.execute(query)
+    data = c.fetchall()
+    price_data = []
+    for item in data:
+        try:
+           dict_data = json.loads(item[6])
+           print["buy_sell_indicator"]
+           if buy_sell_indicator == dict_data["buy_sell_indicator"]:
+               price_data.append(item)
+        except:
+            pass
+
+  
+    c.close()
+
+    return price_data
+    
+
+   
 
     
