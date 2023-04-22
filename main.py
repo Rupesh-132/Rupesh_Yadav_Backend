@@ -5,7 +5,7 @@ import sqlalchemy
 import uvicorn
 import uuid
 
-import datetime as dt
+from datetime import datetime 
 from typing import List
 from typing import Optional
 
@@ -161,3 +161,89 @@ def search_trades(
     return trades
 
 
+
+
+# End point for searching all the trades with particular assser class
+@app.get("/trades/search/assetclass")
+def search_acc_assetclass(
+    asset_class: str = None,
+   
+):
+    # Connect to the database
+    conn = sqlite3.connect('trades.db')
+
+    # Build the WHERE clause of the SQL query based on the provided query parameters
+    where_clauses = []
+    parameters = []
+
+    if asset_class:
+        where_clauses.append("asset_class LIKE ?")
+        parameters.append(f"{asset_class}")
+    
+
+    if not where_clauses:
+        raise HTTPException(status_code=404, detail="No such asset_class exists")
+
+    # Combine the WHERE clauses into a single SQL query
+    where_clause = " OR ".join(where_clauses)
+    select_sql = f'''
+    SELECT * FROM Trades WHERE {where_clause}
+    '''
+
+    cursor = conn.execute(select_sql, tuple(parameters))
+    rows = cursor.fetchall()
+
+    # Close the connection
+    conn.close()
+
+    # If no Trades were found, return an empty list
+    if not rows:
+        return []
+
+    # Otherwise, parse the Trade details from the rows and return them
+    trades = []
+    for row in rows:
+        trade = Trade(
+            asset_class=row[1],
+            counterparty=row[2],
+            instrument_id=row[3],
+            instrument_name=row[4],
+            trade_date_time=row[5],
+            trade_details=TradeDetails.parse_raw(row[6]),
+            trade_id=row[7],
+            trader=row[8]
+        )
+        trades.append(trade)
+
+    return trades
+
+
+
+# EndPoint to fetch single trade with the trade_id
+@app.get("/trades/date_time")
+async def get_trades_acc_date_time(start: datetime,end:datetime):
+    conn = sqlite3.connect('trades.db')
+    c = conn.cursor()
+    query = f"SELECT * FROM trades WHERE trade_date_time BETWEEN {start} and {end}"
+    c.execute(query)
+    trades = []
+    for row in c.fetchall():
+        trade = Trade(
+            asset_class=row[0],
+            counterparty=row[1],
+            instrument_id=row[2],
+            instrument_name=row[3],
+            trade_date_time=datetime.fromisoformat(row[4]),
+            trade_details=TradeDetails(
+                buy_sell_indicator=row[5],
+                price=row[6],
+                quantity=row[7]
+            ),
+            trade_id=row[8],
+            trader=row[9]
+        )
+        trades.append(trade)
+    conn.close()
+    return trades
+
+    
