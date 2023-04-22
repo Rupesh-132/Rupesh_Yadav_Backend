@@ -3,7 +3,6 @@ from pydantic import BaseModel,Field
 import databases
 import sqlalchemy
 import uvicorn
-import uuid
 from pydantic import parse_obj_as
 from pydantic.types import Json
 
@@ -174,7 +173,6 @@ async def search_trades(
 
 
 
-
 # End point for searching all the trades with particular assser class
 @app.get("/trades/search/assetclass/filter{asset_class}")
 async def search_acc_assetclass(
@@ -308,20 +306,18 @@ async def filter_trade_acc_trade_type(buy_sell_indicator:str):
    
     c.execute(query)
     data = c.fetchall()
-    price_data = []
+    trade_data = []
     for item in data:
         try:
            dict_data = json.loads(item[6])
-           print["buy_sell_indicator"]
-           if buy_sell_indicator == dict_data["buy_sell_indicator"]:
-               price_data.append(item)
+           match = dict_data["buy_sell_indicator"].lower()
+           if buy_sell_indicator.lower() == match:
+               trade_data.append(item)
         except:
             pass
 
-  
     c.close()
-
-    return price_data
+    return trade_data
     
 
    
