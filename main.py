@@ -1,7 +1,5 @@
-from fastapi import FastAPI,Depends,HTTPException,Query
+from fastapi import FastAPI,Depends,HTTPException,Query,status
 from pydantic import BaseModel,Field
-import databases
-import sqlalchemy
 import uvicorn
 from pydantic import parse_obj_as
 from pydantic.types import Json
@@ -12,17 +10,12 @@ from typing import Optional
 
 from typing import List
 
-from pydantic import BaseModel, Field
 import sqlite3
-
 from table import create_table_sql as Trades
-
 from schemas.schema import Trade,TradeDetails
 import json
 
 app = FastAPI()
-
-
 
 trades_db = {}
 
@@ -92,7 +85,9 @@ async def get_trade(trade_id: str):
         raise HTTPException(status_code=404, detail="Trade not found")
 
     # Otherwise, parse the Trade details from the row and return them
-    trade = Trade(
+
+    try:
+      trade = Trade(
         asset_class=row[1],
         counterparty=row[2],
         instrument_id=row[3],
@@ -102,12 +97,13 @@ async def get_trade(trade_id: str):
         trade_id=row[7],
         trader=row[8]
     )
-    
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code= status.HTTP_400_BAD_REQUEST, detail="Invalid input: " + str(e))
     
     return trade
 
 
-## EndPoint to seache the trade details using the counterparty,instrument_id,trader,instrument_ name
+## EndPoint to search the trade details using the counterparty,instrument_id,trader,instrument_ name
 @app.get("/trades/search/details")
 async def search_trades(
     counterparty: str = None,
@@ -121,7 +117,9 @@ async def search_trades(
     # Build the WHERE clause of the SQL query based on the provided query parameters
     where_clauses = []
     parameters = []
+    
 
+    #searching into the data if according to either any provided fields or all
     if counterparty:
         where_clauses.append("counterparty LIKE ?")
         parameters.append(f"%{counterparty}%")
@@ -140,10 +138,11 @@ async def search_trades(
 
     # Combine the WHERE clauses into a single SQL query
     where_clause = " OR ".join(where_clauses)
+    
     select_sql = f'''
-    SELECT * FROM Trades WHERE {where_clause}
+    SELECT * FROM Trades WHERE {where_clause} ORDER BY trade_date_time DESC
     '''
-
+    
     cursor = conn.execute(select_sql, tuple(parameters))
     rows = cursor.fetchall()
 
@@ -157,7 +156,8 @@ async def search_trades(
     # Otherwise, parse the Trade details from the rows and return them
     trades = []
     for row in rows:
-        trade = Trade(
+        try:
+          trade = Trade(
             asset_class=row[1],
             counterparty=row[2],
             instrument_id=row[3],
@@ -167,6 +167,9 @@ async def search_trades(
             trade_id=row[7],
             trader=row[8]
         )
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input: " + str(e))
+
         trades.append(trade)
 
     return trades
@@ -214,7 +217,9 @@ async def search_acc_assetclass(
     # Otherwise, parse the Trade details from the rows and return them
     trades = []
     for row in rows:
-        trade = Trade(
+
+        try: 
+          trade = Trade(
             asset_class=row[1],
             counterparty=row[2],
             instrument_id=row[3],
@@ -224,6 +229,10 @@ async def search_acc_assetclass(
             trade_id=row[7],
             trader=row[8]
         )
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input: " + str(e))
+
+
         trades.append(trade)
 
     return trades
@@ -235,27 +244,31 @@ async def search_acc_assetclass(
 async def get_trades_acc_date_time(start: datetime,end:datetime):
     #print(start,end)
     
+    #converting a datetime object into a string representation in the format '%Y-%m-%d %H:%M:%S'
     start = start.strftime('%Y-%m-%d %H:%M:%S')
     end = end.strftime('%Y-%m-%d %H:%M:%S')
+
+
     # Connect to the database
     conn = sqlite3.connect('trades.db')
 
-    # Retrieve Trade details from the Trades table
+    # Retrieve Trade details from the Trades table and sorting the query to fetch the latest  by date
     select_sql = '''
-    SELECT * FROM Trades WHERE trade_date_time BETWEEN ? AND ?
+    SELECT * FROM Trades WHERE trade_date_time BETWEEN ? AND ? ORDER BY trade_date_time DESC
     '''
 
     cursor = conn.execute(select_sql,(start,end))
     rows = cursor.fetchall()
 
-    print(type(rows))
-
+   
     # Close the connection
     conn.close()
 
     trades = []
     for row in rows:
-        trade = Trade(
+
+        try:
+            trade = Trade(
             asset_class=row[1],
             counterparty=row[2],
             instrument_id=row[3],
@@ -265,6 +278,9 @@ async def get_trades_acc_date_time(start: datetime,end:datetime):
             trade_id=row[7],
             trader=row[8]
         )
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input: " + str(e))
+        
         trades.append(trade)
 
     return trades
@@ -297,15 +313,26 @@ async def search_trade_acc_price(mini:float,maxi:float):
 
 # Endpoint to filter the trade according to the tradetype
 @app.get('/trade/filter/{buy_sell_indicator}')
-async def filter_trade_acc_trade_type(buy_sell_indicator:str):
+async def filter_trade_acc_trade_type(buy_sell_indicator:str=None):
 
     # Connect to the database
     conn = sqlite3.connect('trades.db')
+    
+    # creating a cursor to iterate row by row in the database
     c = conn.cursor()
-    query = f"SELECT * FROM trades"
+    #print(type(c))
+
+    #getting all the records and ordering by asset_class
+    query = f"SELECT * FROM trades ORDER BY asset_class"
    
+    #excute the query
     c.execute(query)
+
+    #retrived all the matching query and return the data as list
     data = c.fetchall()
+
+    
+    # fetching all the data having price range from min_price to max_price
     trade_data = []
     for item in data:
         try:
