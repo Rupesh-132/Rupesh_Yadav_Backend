@@ -15,21 +15,20 @@ from table import create_table_sql as Trades
 from schemas.schema import Trade,TradeDetails
 import json
 
-app = FastAPI()
-
-trades_db = {}
-
+#creating instance for fastApi
+app = FastAPI(
+    title='RUPESH_RESTAPI_FASTAPI',
+    description='Api for trades',
+)
 
 # Create a connection to the database
 conn = sqlite3.connect('trades.db')
-
 
 # Commit the changes to the database
 conn.commit()
 
 # Close the connection
 conn.close()
-
 
 # Endpoint to create trade in the local memory for testing
 @app.post("/trades")
@@ -42,8 +41,6 @@ async def create_trade(trade: Trade):
     INSERT INTO Trades (asset_class, counterparty, instrument_id, instrument_name, trade_date_time, trade_details, trade_id, trader)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     '''
-
-    
 
     conn.execute(insert_sql, (trade.asset_class, trade.counterparty, trade.instrument_id, trade.instrument_name,
                               trade.trade_date_time, trade.trade_details.json(), trade.trade_id, trade.trader))
@@ -60,12 +57,37 @@ async def create_trade(trade: Trade):
 
 
 
+#EndPoint to fetch a list of available trades
+@app.get('/trades/gettradelist')
+async def get_trades_list():
+    conn = sqlite3.connect('trades.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM trades")
+    rows = c.fetchall()
+    trades = []
+    for row in rows:
+        trade_dict = {
+            "asset_class": row[1],
+            "counterparty": row[2],
+            "instrument_id": row[3],
+            "instrument_name": row[4],
+            "trade_date_time": row[5],
+            "trade_details": json.loads(row[6]),
+            "trade_id": row[7],
+            "trader": row[8]
+        }
+        trades.append(trade_dict)
+    c.close()
+    return trades
+
+
+
 
 
 
 # EndPoint to fetch single trade with the trade_id
 @app.get("/trades/{trade_id}")
-async def get_trade(trade_id: str):
+async def get_trade_by_tradeid(trade_id: str):
     # Connect to the database
     conn = sqlite3.connect('trades.db')
 
@@ -118,7 +140,6 @@ async def search_trades(
     where_clauses = []
     parameters = []
     
-
     #searching into the data if according to either any provided fields or all
     if counterparty:
         where_clauses.append("counterparty LIKE ?")
@@ -193,7 +214,6 @@ async def search_acc_assetclass(
     if asset_class:
         where_clauses.append("asset_class LIKE ?")
         parameters.append(f"{asset_class}")
-    
 
     if not where_clauses:
         raise HTTPException(status_code=404, detail="No such asset_class exists")
@@ -203,7 +223,6 @@ async def search_acc_assetclass(
     select_sql = f'''
     SELECT * FROM Trades WHERE {where_clause}
     '''
-
     cursor = conn.execute(select_sql, tuple(parameters))
     rows = cursor.fetchall()
 
@@ -236,7 +255,6 @@ async def search_acc_assetclass(
         trades.append(trade)
 
     return trades
-
 
 
 # EndPoint to fetch single trade with the trade_id
@@ -312,7 +330,7 @@ async def search_trade_acc_price(mini:float,maxi:float):
     
 
 # Endpoint to filter the trade according to the tradetype
-@app.get('/trade/filter/{buy_sell_indicator}')
+@app.get('/trades/filter/{buy_sell_indicator}')
 async def filter_trade_acc_trade_type(buy_sell_indicator:str=None):
 
     # Connect to the database
