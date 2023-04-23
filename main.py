@@ -58,7 +58,7 @@ async def create_trade(trade: Trade):
 
 
 #EndPoint to fetch a list of available trades
-@app.get('/trades/gettradelist')
+@app.get('/trades/get_trade_list')
 async def get_trades_list():
     conn = sqlite3.connect('trades.db')
     c = conn.cursor()
