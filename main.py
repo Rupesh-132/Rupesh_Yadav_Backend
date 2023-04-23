@@ -81,10 +81,6 @@ async def get_trades_list():
     return trades
 
 
-
-
-
-
 # EndPoint to fetch single trade with the trade_id
 @app.get("/trades/{trade_id}")
 async def get_trade_by_tradeid(trade_id: str):
