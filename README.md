@@ -7,6 +7,7 @@ Welcome to Trades REST API, a powerful tool for accessing and managing trade dat
 - Each trade is represented by a well-defined schema that includes all relevant details such as trade date/time, trade ID, and trade details (price and quantity).
 
 The app will appear like this using swagger UI
+
 ![readme](https://user-images.githubusercontent.com/79595858/233818745-d84a2556-0fda-4d33-8bb5-01189d69fbcd.jpg)
 
 
